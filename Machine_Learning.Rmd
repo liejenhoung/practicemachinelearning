@@ -1,0 +1,207 @@
+---
+title: "Machine Learning"
+author: "liejenhoung"
+date: "26 July, 2015"
+output: html_document
+---
+
+-------------------------------
+
+## Introduction
+
+### Background
+
+This is a course project of a MOOC in coursera called "Practical Machine Learning". Large amount of data about personal activity has been provided to find patterns of individual health behaviours.
+
+In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+### Data
+
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source:
+http://groupware.les.inf.puc-rio.br/har
+
+### What you should submit
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+1. Your submission should consist of a link to a Github repo with your R markdown and compiled HTML file describing your analysis. Please constrain the text of the writeup to < 2000 words and the number of figures to be less than 5. It will make it easier for the graders if you submit a repo with a gh-pages branch so the HTML page can be viewed online (and you always want to make it easy on graders).
+
+2. You should also apply your machine learning algorithm to the 20 test cases available in the test data above. Please submit your predictions in appropriate format to the programming assignment for automated grading. See the programming assignment for additional details.
+
+-------------------------------
+
+## Preliminary Work
+
+### Reproducibility
+
+To ensure reproducibility, please install the following packages in your R environment:
+
+1. ggplot2
+2. rpart
+3. rpart.plot
+4. caret
+5. randomForest
+6. MASS
+
+```{r}
+library(ggplot2)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(randomForest)
+library(MASS)
+```
+
+For the pseudo-random number generator, please set the seed to "0726" for all code.
+
+```{r}
+set.seed(0726)
+```
+
+Lastly, please set your working directory to which containing the two prescribed data sets.
+
+```{r}
+setwd("~/Documents/Coursera/Data Science/Practical Machine Learning")
+```
+
+### How the model is built
+
+Random forest will be used as it is a well-known good performance model. We will also explore decision tree and linear discriminant analysis (LDA) in the appendix.  (they are only for self-learning purpose and not included in the word counts and plots in the report)
+
+### Cross Validation
+
+Data splitting will be used to perform cross validation. The first 70% of data will be used as training data-set and the remaining for in-sample testing.
+
+### Expected out-of-sample error
+
+The expected out-of-sample error can be approximated by the in-sample error from the testing dataset in cross validation. We will investigate for all these measures:
+
+1. Sensitivity
+2. Specificity
+3. Positive Predictive Value
+4. Negative Predictive Value
+5. Accuracy
+
+-------------------------------
+
+## Data Processing
+
+### Loading Data
+
+```{r}
+# Replace all empty values and divide by zero values to "NA" to facilitate future data processing
+training_dat <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!", ""))
+testing_dat <- read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!", ""))
+# Let's have a look on the data
+str(training_dat, list.len = 8)
+```
+
+### Cleaning Data
+```{r}
+# First look at the dimension of existing training data
+dim(training_dat)
+```
+
+```{r}
+# From loading the data part we can find them quite a few columns are primarily filled up by NAs. Let's explore it first.
+NAs <- colSums(is.na(training_dat))
+summary(NAs)
+```
+
+```{r}
+# Predictors containing too many NAs will reduce efficiencies as well as decreasing model accuracy. We would like to remove the columns with too many NAs (only keep those less than 1000 NAs).
+training_dat <- training_dat[,NAs < 1000]
+```
+
+```{r}
+# Note that the first seven columns are row numbers, user names and time which are not usable for the prediction. We shall remove them as well.
+training_dat <- training_dat[,-c(1:7)]
+```
+
+```{r}
+# Many columns / predictors are removed. Let's look at the dimension again.
+dim(training_dat)
+```
+
+```{r}
+# We shall do the similar to the testing data set:
+testing_dat <- testing_dat[,NAs < 1000]
+testing_dat <- testing_dat[,-c(1:7)]
+dim(testing_dat)
+```
+
+### Data Slicing
+
+```{r}
+# Data Slicing for cross validation. First 70% data will be used as in-sample training data and the remaining as in-sample testing data.
+inTrain <- createDataPartition(y=training_dat$classe, p=0.7, list=FALSE)
+training_insample <- training_dat[inTrain,]
+testing_insample <- training_dat[-inTrain,]
+dim(training_insample)
+```
+
+-------------------------------
+
+## Machine Learning
+
+### Random Forest
+
+```{r}
+# Fit the model and predict on the in-sample testing data set by random forest
+RFModel <- randomForest(classe ~. , data=training_insample, method="class")
+Predict_RF_insample <- predict(RFModel, testing_insample, type = "class")
+confusionMatrix(Predict_RF_insample, testing_insample$classe)
+```
+
+### Prediction
+```{r}
+# Do the prediction on testing data set
+Predict_RF_outsample <- predict(RFModel, testing_dat, type="class")
+Predict_RF_outsample
+```
+
+### Submission
+```{r}
+# Write files for submission
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(Predict_RF_outsample)
+```
+
+-------------------------------
+
+# Appendix
+
+### Linear Discriminant Analysis (LDA)
+
+```{r}
+# Fit the model and predict on the in-sample testing data set by LDA
+
+LDAModel <- train(classe ~., data = training_insample, method="lda")
+Predict_LDA_insample <- predict(LDAModel, testing_insample, type = "raw")
+confusionMatrix(Predict_LDA_insample, testing_insample$classe)
+```
+
+### Decision Trees
+
+```{r}
+# Fit the model and predict on the in-sample testing data set by decision trees
+DTModel <- rpart(classe ~. , data = training_insample, method="class")
+Predict_DT_insample <- predict(DTModel, testing_insample, type = "class")
+confusionMatrix(Predict_DT_insample, testing_insample$classe)
+rpart.plot(DTModel)
+```
+
+It can be seen that both models are producing reasonable results but their performance are not as good as random forest.
